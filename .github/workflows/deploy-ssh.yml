@@ -1,0 +1,245 @@
+# 通过 SSH 直连方式部署后端项目到自建服务器
+# 使用前请先在仓库 Settings → Secrets and variables → Actions 中配置以下 Secrets:
+#   SERVER_HOST         服务器 IP 或域名 (如 1.2.3.4 或 example.com)
+#   SERVER_PORT         SSH 端口 (如 22)
+#   SERVER_USER         SSH 登录用户 (如 deploy)
+#   SSH_PRIVATE_KEY     SSH 私钥 (完整内容, 包含 -----BEGIN/END----- 行)
+#   DEPLOY_PATH         服务器上项目部署路径 (如 /var/www/myapp)
+#   .env (可选)         生产环境变量文件, 将被同步到服务器 (敏感信息不入库)
+#
+# 私钥生成与服务器配置:
+#   1. 本地生成密钥对:        ssh-keygen -t ed25519 -f ~/.ssh/deploy_key -N ""
+#   2. 公钥追加到服务器:       ssh-copy-id -i ~/.ssh/deploy_key.pub deploy@SERVER_HOST
+#   3. 私钥内容粘贴到 GitHub Secret: SSH_PRIVATE_KEY
+#   4. 服务器用户需具备 DEPLOY_PATH 的读写权限
+
+name: SSH 部署到自建服务器
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:          # 支持手动触发
+    inputs:
+      debug:
+        description: '启用调试输出 (输出更多日志)'
+        type: boolean
+        default: false
+
+# 同一时间只允许一次部署, 避免并发冲突
+concurrency:
+  group: deploy-ssh
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20'
+  APP_NAME: 'myapp'           # 应用名 (用于 PM2 进程名)
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production    # 关联生产环境, 可配置部署审批/等待
+    timeout-minutes: 15
+    steps:
+      # === 1. 拉取代码 ===
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # === 2. 配置 Node.js ===
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      # === 3. 安装依赖 ===
+      - name: 安装依赖
+        run: npm ci --omit=dev
+
+      # === 4. 运行测试 (可选, 失败则中止部署) ===
+      - name: 运行测试
+        run: npm test
+        continue-on-error: true   # 无测试时可改为 true 跳过失败
+
+      # === 5. 构建 (如有构建步骤) ===
+      - name: 构建
+        run: npm run build --if-present
+
+      # === 6. 打包部署产物 (排除开发文件) ===
+      - name: 打包部署产物
+        run: |
+          mkdir -p deploy-pkg
+          # 复制运行所需文件 (按项目实际结构调整)
+          rsync -av \
+            --exclude='deploy-pkg' \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='src' \
+            --exclude='test' \
+            --exclude='.github' \
+            --exclude='*.md' \
+            ./ deploy-pkg/
+          # 生成版本信息
+          echo "${{ github.sha }}" > deploy-pkg/VERSION
+          echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> deploy-pkg/VERSION
+          tar -czf deploy.tar.gz -C deploy-pkg .
+          ls -lh deploy.tar.gz
+          echo "PACKAGE_SIZE=$(du -h deploy.tar.gz | cut -f1)" >> $GITHUB_ENV
+
+      # === 7. 配置 SSH ===
+      - name: 配置 SSH 私钥
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # 写入私钥
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # 锁定服务器指纹, 防止中间人攻击
+          ssh-keyscan -p ${{ secrets.SERVER_PORT || 22 }} -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
+
+      # === 8. 上传部署包到服务器 ===
+      - name: 上传部署包
+        run: |
+          scp -P ${{ secrets.SERVER_PORT || 22 }} \
+              -o StrictHostKeyChecking=yes \
+              deploy.tar.gz \
+              ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/deploy-${{ github.sha }}.tar.gz
+
+      # === 9. 在服务器上执行部署脚本 ===
+      - name: 远程部署
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # 在服务器上执行的命令
+          script: |
+            set -e
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            APP_NAME="${{ env.APP_NAME }}"
+            PKG_FILE="/tmp/deploy-${{ github.sha }}.tar.gz"
+            
+            echo ">>> 部署开始: $(date)"
+            echo ">>> 目标路径: $DEPLOY_PATH"
+            
+            # 创建目录 (首次部署)
+            mkdir -p "$DEPLOY_PATH"
+            mkdir -p "$DEPLOY_PATH/releases"
+            
+            # 备份当前版本 (用于回滚)
+            if [ -d "$DEPLOY_PATH/current" ] && [ -L "$DEPLOY_PATH/current" ]; then
+              PREV=$(readlink "$DEPLOY_PATH/current")
+              echo ">>> 当前版本: $PREV"
+            fi
+            
+            # 创建新版本目录
+            RELEASE_DIR="$DEPLOY_PATH/releases/$(date +%Y%m%d_%H%M%S)_${GITHUB_SHA:0:7}"
+            mkdir -p "$RELEASE_DIR"
+            
+            # 解压部署包
+            tar -xzf "$PKG_FILE" -C "$RELEASE_DIR"
+            rm -f "$PKG_FILE"
+            
+            # 复制持久化文件 (如 .env, 上传文件等)
+            if [ -f "$DEPLOY_PATH/shared/.env" ]; then
+              cp "$DEPLOY_PATH/shared/.env" "$RELEASE_DIR/.env"
+              echo ">>> 已同步 .env"
+            fi
+            if [ -d "$DEPLOY_PATH/shared/uploads" ]; then
+              ln -s "$DEPLOY_PATH/shared/uploads" "$RELEASE_DIR/uploads"
+              echo ">>> 已链接 uploads 目录"
+            fi
+            
+            # 安装生产依赖 (如 package.json 存在)
+            if [ -f "$RELEASE_DIR/package.json" ]; then
+              cd "$RELEASE_DIR"
+              npm ci --omit=dev --no-audit --no-fund
+              echo ">>> 依赖安装完成"
+            fi
+            
+            # 切换 current 软链接到新版本
+            ln -sfn "$RELEASE_DIR" "$DEPLOY_PATH/current"
+            
+            # 重启应用 (优先 PM2, 其次 systemd)
+            if command -v pm2 &> /dev/null; then
+              cd "$DEPLOY_PATH/current"
+              if pm2 list | grep -q "$APP_NAME"; then
+                pm2 reload "$APP_NAME"
+                echo ">>> PM2 重载完成"
+              else
+                pm2 start npm --name "$APP_NAME" -- start
+                pm2 save
+                echo ">>> PM2 启动完成"
+              fi
+            elif systemctl list-unit-files | grep -q "$APP_NAME"; then
+              sudo systemctl restart "$APP_NAME"
+              echo ">>> systemd 重启完成"
+            else
+              echo ">>> 警告: 未找到 PM2 或 systemd 服务, 请手动启动"
+            fi
+            
+            # 清理旧版本 (保留最近 5 个)
+            cd "$DEPLOY_PATH/releases"
+            ls -1dt */ | tail -n +6 | xargs rm -rf
+            echo ">>> 已清理旧版本"
+            
+            echo ">>> 部署完成: $(date)"
+
+      # === 10. 健康检查 ===
+      - name: 健康检查
+        run: |
+          sleep 5
+          # 尝试访问应用健康检查端点 (按需调整)
+          for i in {1..6}; do
+            if ssh -p ${{ secrets.SERVER_PORT || 22 }} \
+                  -o StrictHostKeyChecking=yes \
+                  ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+                  "curl -sf -o /dev/null http://localhost:3000/health || exit 1"; then
+              echo "健康检查通过"
+              exit 0
+            fi
+            echo "等待应用启动... ($i/6)"
+            sleep 5
+          done
+          echo "健康检查失败"
+          exit 1
+
+      # === 11. 部署失败时回滚 ===
+      - name: 失败回滚
+        if: failure()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            APP_NAME="${{ env.APP_NAME }}"
+            
+            # 找到上一个版本
+            cd "$DEPLOY_PATH/releases"
+            PREV=$(ls -1dt */ | sed -n '2p' | tr -d '/')
+            
+            if [ -n "$PREV" ]; then
+              ln -sfn "$DEPLOY_PATH/releases/$PREV" "$DEPLOY_PATH/current"
+              if command -v pm2 &> /dev/null; then
+                pm2 reload "$APP_NAME" || pm2 restart "$APP_NAME"
+              fi
+              echo ">>> 已回滚到版本: $PREV"
+            else
+              echo ">>> 无可用旧版本, 无法回滚"
+            fi
+
+      # === 12. 通知 (可选: 接入钉钉/飞书/Slack Webhook) ===
+      - name: 通知部署结果
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "部署成功 - 分支: ${{ github.ref_name }} | 提交: ${{ github.sha }}"
+          else
+            echo "部署失败 - 分支: ${{ github.ref_name }} | 提交: ${{ github.sha }}"
+            exit 1
+          fi
