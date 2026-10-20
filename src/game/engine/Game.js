@@ -8,7 +8,7 @@ import { Enemy } from '../entities/Enemy.js'
 import { Bullet } from '../entities/Bullet.js'
 import { PowerUp } from '../entities/PowerUp.js'
 import { Explosion } from '../entities/Explosion.js'
-import { drawBubble } from './Sprites.js'
+import { drawBubble, drawMenuPortrait } from './Sprites.js'
 
 // 主游戏控制器
 export class Game {
@@ -430,28 +430,56 @@ export class Game {
 
   renderMenu() {
     const ctx = this.ctx
-    // 标题画面
-    ctx.fillStyle = '#000'
+    // 渐变背景
+    const grad = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT)
+    grad.addColorStop(0, '#1a0a2a')
+    grad.addColorStop(0.5, '#2a1a3a')
+    grad.addColorStop(1, '#0a0a1a')
+    ctx.fillStyle = grad
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+
+    // 装饰星星
+    for (let i = 0; i < 30; i++) {
+      const sx = (i * 37 + this.frame * 0.3) % GAME_WIDTH
+      const sy = (i * 23) % 120
+      const tw = Math.sin(this.frame * 0.05 + i) * 0.5 + 0.5
+      ctx.fillStyle = `rgba(252,252,252,${tw * 0.4})`
+      ctx.fillRect(sx, sy, 1, 1)
+    }
+
+    // === 女帝像素头像 (大图, 居中上方) ===
+    drawMenuPortrait(ctx, GAME_WIDTH / 2 - 28, 30)
+
     // 标题
-    ctx.fillStyle = '#fc2828'
-    ctx.font = 'bold 36px monospace'
     ctx.textAlign = 'center'
-    ctx.fillText('CONTRA', GAME_WIDTH / 2, 80)
-    ctx.fillStyle = '#fcfc28'
-    ctx.font = 'bold 16px monospace'
-    ctx.fillText('魂 斗 罗', GAME_WIDTH / 2, 110)
+    ctx.fillStyle = '#fc2848'
+    ctx.font = 'bold 32px monospace'
+    ctx.fillText('女帝の试炼', GAME_WIDTH / 2, 130)
+    // 副标题
+    ctx.fillStyle = '#fcb068'
+    ctx.font = 'bold 14px monospace'
+    ctx.fillText('BOA HANCOCK', GAME_WIDTH / 2, 150)
+    // 装饰线
+    ctx.fillStyle = '#fc2848'
+    ctx.fillRect(GAME_WIDTH / 2 - 60, 156, 120, 2)
+    ctx.fillStyle = '#fcb068'
+    ctx.fillRect(GAME_WIDTH / 2 - 40, 159, 80, 1)
+
     // 闪烁提示
     if (Math.floor(this.frame / 30) % 2 === 0) {
       ctx.fillStyle = '#fcfcfc'
-      ctx.font = '12px monospace'
-      ctx.fillText('PRESS START / 点击开始', GAME_WIDTH / 2, 180)
+      ctx.font = 'bold 14px monospace'
+      ctx.fillText('▶ 点击开始 ◀', GAME_WIDTH / 2, 185)
     }
+
     // 操作说明
-    ctx.fillStyle = '#aaa'
+    ctx.fillStyle = '#a8a8c8'
     ctx.font = '10px monospace'
-    ctx.fillText('PC: 方向键移动  Z跳跃  X射击  Enter暂停', GAME_WIDTH / 2, 220)
-    ctx.fillText('手机: 屏幕按钮控制', GAME_WIDTH / 2, 236)
+    ctx.fillText('PC: 方向键移动  Z跳跃  X射击  Enter暂停', GAME_WIDTH / 2, 215)
+    ctx.fillText('手机: 屏幕方向键 + 动作按钮', GAME_WIDTH / 2, 230)
+    ctx.fillStyle = '#fcd8e8'
+    ctx.font = 'bold 10px monospace'
+    ctx.fillText('— Made by hanyu —', GAME_WIDTH / 2, 250)
     ctx.textAlign = 'left'
   }
 

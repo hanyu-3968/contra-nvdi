@@ -26,3 +26,8 @@ npm-debug.log*
 
 # Vite 缓存
 .vite/
+
+# Android
+android/
+android-sdk/
+nul

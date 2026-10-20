@@ -9,12 +9,57 @@ function px(ctx, x, y, w, h, color) {
   ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h))
 }
 
-// === 玩家绘制 ===
+// === 女帝图片精灵加载 ===
+const SPRITE_URLS = {
+  stand: new URL('../../assets/sprites/nvdi_standing.png', import.meta.url).href,
+  run1: new URL('../../assets/sprites/nvdi_run1.png', import.meta.url).href,
+  run2: new URL('../../assets/sprites/nvdi_run2.png', import.meta.url).href,
+  jump: new URL('../../assets/sprites/nvdi_jump.png', import.meta.url).href,
+  crouch: new URL('../../assets/sprites/nvdi_crouch.png', import.meta.url).href,
+  die: new URL('../../assets/sprites/nvdi_die.png', import.meta.url).href,
+  portrait: new URL('../../assets/sprites/nvdi_portrait.png', import.meta.url).href,
+}
+
+const spriteCache = {}
+let spritesLoaded = false
+let spritesLoadFailed = false
+
+function loadSprite(url) {
+  if (spriteCache[url]) return spriteCache[url]
+  const img = new Image()
+  img.src = url
+  spriteCache[url] = img
+  return img
+}
+
+function loadAllSprites() {
+  if (spritesLoaded || spritesLoadFailed) return
+  spritesLoaded = true
+  Object.values(SPRITE_URLS).forEach(url => loadSprite(url))
+}
+
+// 页面加载时预加载
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadAllSprites)
+  } else {
+    loadAllSprites()
+  }
+}
+
+// === 玩家绘制 — 女帝 (波雅·汉库克) ===
+// 使用图片精灵渲染
 // dir: 1 右, -1 左; state: 'stand'|'run'|'jump'|'crouch'|'die'
 // aim: 角度 (弧度); frame: 动画帧
 export function drawPlayer(ctx, x, y, w, h, dir, state, aim, frame, weapon) {
+  // 如果图片加载失败，回退到代码绘制
+  const img = getSpritesForState(state, frame)
+  if (!img || !img.complete || img.naturalWidth === 0) {
+    drawPlayerFallback(ctx, x, y, w, h, dir, state, aim, frame, weapon)
+    return
+  }
+
   ctx.save()
-  // 翻转处理
   const flip = dir < 0
   if (flip) {
     ctx.translate(Math.floor(x + w), 0)
@@ -25,80 +70,242 @@ export function drawPlayer(ctx, x, y, w, h, dir, state, aim, frame, weapon) {
   }
   y = Math.floor(y)
 
-  const skin = COLORS.playerSkin
-  const suit = COLORS.player
-  const hat = COLORS.playerHat
-  const boot = '#4a2c10'
-  const gun = '#383838'
-  const dark = '#1a3a8a'
-
-  const crouch = state === 'crouch'
-  const bodyTop = crouch ? y + 6 : y + 2
-  const bodyH = crouch ? 8 : 12
-  const legY = y + h - 4
-
-  if (state === 'die') {
-    // 死亡姿态 - 仰躺
-    px(ctx, x + 2, y + 8, 10, 4, suit)
-    px(ctx, x + 4, y + 6, 6, 3, skin)
-    px(ctx, x + 10, y + 9, 4, 2, gun)
-    px(ctx, x + 1, y + 12, 5, 3, boot)
-    px(ctx, x + 8, y + 12, 5, 3, boot)
-    ctx.restore()
-    return
-  }
-
-  // 头部
-  px(ctx, x + 4, bodyTop, 6, 5, skin)
-  // 帽子
-  px(ctx, x + 3, bodyTop - 1, 8, 2, hat)
-  px(ctx, x + 5, bodyTop, 4, 1, hat)
-  // 眼睛
-  px(ctx, x + 7, bodyTop + 2, 1, 1, '#000')
-  // 身体
-  px(ctx, x + 3, bodyTop + 5, 8, bodyH, suit)
-  // 腰带
-  px(ctx, x + 3, bodyTop + 5 + bodyH - 2, 8, 2, dark)
-
-  // 腿
-  const runFrame = state === 'run' ? (Math.floor(frame / 4) % 4) : 0
-  if (state === 'jump') {
-    // 跳跃时腿弯曲
-    px(ctx, x + 3, legY - 4, 3, 4, suit)
-    px(ctx, x + 8, legY - 4, 3, 4, suit)
-    px(ctx, x + 3, legY, 3, 3, boot)
-    px(ctx, x + 8, legY, 3, 3, boot)
-  } else if (crouch) {
-    px(ctx, x + 2, legY, 5, 3, boot)
-    px(ctx, x + 8, legY, 5, 3, boot)
-  } else {
-    const offsets = [[0, 0], [1, -1], [0, 0], [-1, -1]]
-    const [o1, o2] = offsets[runFrame]
-    px(ctx, x + 3, legY - 2 + o2, 3, 4, suit)
-    px(ctx, x + 8, legY - 2 + o1, 3, 4, suit)
-    px(ctx, x + 3, legY + 2 + o2, 3, 2, boot)
-    px(ctx, x + 8, legY + 2 + o1, 3, 2, boot)
-  }
-
-  // 手臂和枪 - 根据瞄准角度
-  // aim: 0=水平向右, 负=向上, 正=向下
-  drawArmAndGun(ctx, x, bodyTop, bodyH, state, aim, gun, skin, suit)
+  // 绘制精灵图，缩放到玩家尺寸
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(img, x, y, w, h)
 
   ctx.restore()
 }
 
-function drawArmAndGun(ctx, x, bodyTop, bodyH, state, aim, gun, skin, suit) {
-  // 简化: 根据 aim 决定手臂方向
-  const cx = x + 11
-  const cy = bodyTop + 7
-  if (state === 'crouch') {
-    px(ctx, x + 9, bodyTop + 4, 5, 2, gun)
-    px(ctx, x + 13, bodyTop + 4, 2, 2, skin)
+function getSpritesForState(state, frame) {
+  switch (state) {
+    case 'run':
+      // 跑步动画: 两帧交替
+      const runFrame = Math.floor(frame / 6) % 2
+      return loadSprite(runFrame === 0 ? SPRITE_URLS.run1 : SPRITE_URLS.run2)
+    case 'jump':
+      return loadSprite(SPRITE_URLS.jump)
+    case 'crouch':
+      return loadSprite(SPRITE_URLS.crouch)
+    case 'die':
+      return loadSprite(SPRITE_URLS.die)
+    case 'stand':
+    default:
+      return loadSprite(SPRITE_URLS.stand)
+  }
+}
+
+// === 回退: 代码绘制女帝 (当图片不可用时) ===
+function drawPlayerFallback(ctx, x, y, w, h, dir, state, aim, frame, weapon) {
+  ctx.save()
+  const flip = dir < 0
+  if (flip) {
+    ctx.translate(Math.floor(x + w), 0)
+    ctx.scale(-1, 1)
+    x = 0
+  } else {
+    x = Math.floor(x)
+  }
+  y = Math.floor(y)
+
+  // === 女帝调色板 (三层明暗) ===
+  const skin = '#fce8d8'
+  const skinHi = '#fff8f0'
+  const skinLo = '#e8b898'
+  const hair = '#1a1a2a'
+  const hairHi = '#3a3a4a'
+  const hairLo = '#0a0a14'
+  const dress = '#d82838'
+  const dressHi = '#fc4858'
+  const dressLo = '#8c1828'
+  const gold = '#fcb068'
+  const goldHi = '#fcd898'
+  const goldLo = '#bc8838'
+  const accent = '#fcd8e8'
+  const gun = '#383838'
+  const gunHi = '#686868'
+  const boot = '#6c1828'
+  const bootHi = '#8c2838'
+  const outline = '#0a0a14'
+
+  const crouch = state === 'crouch'
+  const die = state === 'die'
+
+  if (die) {
+    drawPlayerDie(ctx, x, y, w, h, { skin, skinHi, skinLo, hair, hairHi, hairLo, dress, dressHi, dressLo, gold, goldHi, goldLo, accent, gun, gunHi, boot, bootHi, outline })
+    ctx.restore()
     return
   }
-  // 默认水平
+
+  const bodyTop = crouch ? y + 7 : y + 1
+  const bodyH = crouch ? 9 : 13
+  const legY = y + h - 5
+
+  // 长发
+  px(ctx, x + 2, bodyTop - 1, 10, 1, hairLo)
+  px(ctx, x + 1, bodyTop, 1, 8, hairLo)
+  px(ctx, x + 12, bodyTop, 1, 8, hairLo)
+  px(ctx, x + 1, bodyTop + 7, 12, 1, hairLo)
+  px(ctx, x + 2, bodyTop, 10, 6, hair)
+  px(ctx, x + 2, bodyTop + 6, 10, 1, hairHi)
+  px(ctx, x + 4, bodyTop + 1, 1, 4, hairHi)
+  px(ctx, x + 9, bodyTop + 1, 1, 4, hairHi)
+
+  if (state === 'run') {
+    const hf = Math.floor(frame / 4) % 4
+    const ho = [0, 1, 0, -1][hf]
+    px(ctx, x - 2 + ho, bodyTop + 1, 2, 1, hairLo)
+    px(ctx, x - 1 + ho, bodyTop + 2, 2, 5, hair)
+    px(ctx, x - 1 + ho, bodyTop + 6, 2, 1, hairLo)
+  }
+  if (state === 'jump') {
+    px(ctx, x + 1, bodyTop - 3, 10, 1, hairLo)
+    px(ctx, x + 1, bodyTop - 2, 10, 2, hair)
+    px(ctx, x + 3, bodyTop - 2, 1, 1, hairHi)
+    px(ctx, x + 8, bodyTop - 2, 1, 1, hairHi)
+  }
+
+  // 头部
+  px(ctx, x + 4, bodyTop, 6, 1, skinLo)
+  px(ctx, x + 3, bodyTop + 1, 1, 4, skinLo)
+  px(ctx, x + 10, bodyTop + 1, 1, 4, skinLo)
+  px(ctx, x + 4, bodyTop + 5, 6, 1, skinLo)
+  px(ctx, x + 4, bodyTop + 1, 6, 4, skin)
+  px(ctx, x + 5, bodyTop + 1, 1, 1, skinHi)
+
+  // 刘海
+  px(ctx, x + 3, bodyTop - 1, 8, 1, hairLo)
+  px(ctx, x + 3, bodyTop, 2, 2, hair)
+  px(ctx, x + 8, bodyTop, 2, 2, hair)
+  px(ctx, x + 5, bodyTop, 3, 1, hairHi)
+  px(ctx, x + 3, bodyTop + 1, 1, 4, hair)
+  px(ctx, x + 10, bodyTop + 1, 1, 4, hair)
+  px(ctx, x + 3, bodyTop + 5, 1, 1, hairLo)
+  px(ctx, x + 10, bodyTop + 5, 1, 1, hairLo)
+
+  // 眼睛
+  px(ctx, x + 5, bodyTop + 2, 2, 1, hair)
+  px(ctx, x + 9, bodyTop + 2, 2, 1, hair)
+  px(ctx, x + 6, bodyTop + 2, 1, 1, '#000')
+  px(ctx, x + 9, bodyTop + 2, 1, 1, '#000')
+  px(ctx, x + 6, bodyTop + 3, 1, 1, skinLo)
+  px(ctx, x + 9, bodyTop + 3, 1, 1, skinLo)
+  px(ctx, x + 7, bodyTop + 4, 2, 1, '#c84868')
+  px(ctx, x + 5, bodyTop + 3, 1, 1, '#fc8888')
+  px(ctx, x + 10, bodyTop + 3, 1, 1, '#fc8888')
+
+  // 身体
+  px(ctx, x + 2, bodyTop + 5, 1, bodyH, dressLo)
+  px(ctx, x + 11, bodyTop + 5, 1, bodyH, dressLo)
+  px(ctx, x + 2, bodyTop + 5 + bodyH, 10, 1, dressLo)
+  px(ctx, x + 3, bodyTop + 5, 8, bodyH, dress)
+  px(ctx, x + 3, bodyTop + 5, 8, 1, dressHi)
+  px(ctx, x + 5, bodyTop + 5, 4, 1, skin)
+  px(ctx, x + 6, bodyTop + 6, 2, 1, skinLo)
+  px(ctx, x + 4, bodyTop + 7, 1, 1, accent)
+  px(ctx, x + 9, bodyTop + 9, 1, 1, accent)
+  px(ctx, x + 6, bodyTop + 8, 1, 1, accent)
+  px(ctx, x + 2, bodyTop + 5 + bodyH - 3, 10, 1, goldLo)
+  px(ctx, x + 3, bodyTop + 5 + bodyH - 2, 8, 2, gold)
+  px(ctx, x + 3, bodyTop + 5 + bodyH - 2, 8, 1, goldHi)
+  px(ctx, x + 2, bodyTop + 5 + bodyH, 10, 1, goldLo)
+  px(ctx, x + 5, bodyTop + 5 + bodyH - 1, 1, 1, goldLo)
+  px(ctx, x + 8, bodyTop + 5 + bodyH - 1, 1, 1, goldLo)
+
+  // 腿
+  const runFrame = state === 'run' ? (Math.floor(frame / 4) % 4) : 0
+  if (state === 'jump') {
+    px(ctx, x + 1, legY - 7, 12, 1, dressLo)
+    px(ctx, x + 1, legY - 6, 12, 3, dress)
+    px(ctx, x + 2, legY - 6, 10, 1, dressHi)
+    px(ctx, x + 3, legY - 3, 1, 3, dressLo)
+    px(ctx, x + 4, legY - 3, 2, 3, skin)
+    px(ctx, x + 8, legY - 3, 2, 3, skin)
+    px(ctx, x + 10, legY - 3, 1, 3, dressLo)
+    px(ctx, x + 3, legY, 3, 1, boot)
+    px(ctx, x + 3, legY + 1, 3, 3, boot)
+    px(ctx, x + 3, legY + 1, 3, 1, bootHi)
+    px(ctx, x + 8, legY, 3, 1, boot)
+    px(ctx, x + 8, legY + 1, 3, 3, boot)
+    px(ctx, x + 8, legY + 1, 3, 1, bootHi)
+  } else if (crouch) {
+    px(ctx, x + 0, legY - 3, 14, 1, dressLo)
+    px(ctx, x + 1, legY - 2, 12, 3, dress)
+    px(ctx, x + 1, legY - 2, 12, 1, dressHi)
+    px(ctx, x + 2, legY + 1, 4, 1, boot)
+    px(ctx, x + 2, legY + 2, 4, 2, boot)
+    px(ctx, x + 2, legY + 2, 4, 1, bootHi)
+    px(ctx, x + 8, legY + 1, 4, 1, boot)
+    px(ctx, x + 8, legY + 2, 4, 2, boot)
+    px(ctx, x + 8, legY + 2, 4, 1, bootHi)
+  } else {
+    const offsets = [[0, 0], [1, -1], [0, 0], [-1, -1]]
+    const [o1, o2] = offsets[runFrame]
+    px(ctx, x + 1, legY - 5, 12, 1, dressLo)
+    px(ctx, x + 2, legY - 4, 10, 3, dress)
+    px(ctx, x + 2, legY - 4, 10, 1, dressHi)
+    px(ctx, x + 3, legY - 1 + o2, 3, 3, skin)
+    px(ctx, x + 3, legY - 1 + o2, 1, 3, skinLo)
+    px(ctx, x + 8, legY - 1 + o1, 3, 3, skin)
+    px(ctx, x + 8, legY - 1 + o1, 1, 3, skinLo)
+    px(ctx, x + 3, legY + 2 + o2, 3, 1, boot)
+    px(ctx, x + 3, legY + 3 + o2, 3, 2, boot)
+    px(ctx, x + 3, legY + 3 + o2, 3, 1, bootHi)
+    px(ctx, x + 8, legY + 2 + o1, 3, 1, boot)
+    px(ctx, x + 8, legY + 3 + o1, 3, 2, boot)
+    px(ctx, x + 8, legY + 3 + o1, 3, 1, bootHi)
+  }
+
+  // 手臂和枪
+  drawArmAndGun(ctx, x, bodyTop, bodyH, state, aim, { gun, gunHi, skin, skinHi, skinLo, dress, dressHi, dressLo, outline })
+
+  ctx.restore()
+}
+
+// === 死亡姿态 ===
+function drawPlayerDie(ctx, x, y, w, h, c) {
+  // 长发散开
+  px(ctx, x + 0, y + 8, 14, 1, c.hairLo)
+  px(ctx, x + 0, y + 9, 14, 3, c.hair)
+  px(ctx, x + 2, y + 9, 10, 1, c.hairHi)
+  px(ctx, x + 0, y + 12, 14, 1, c.hairLo)
+  // 身体 (红色和服)
+  px(ctx, x + 3, y + 10, 8, 1, c.dressLo)
+  px(ctx, x + 3, y + 11, 8, 3, c.dress)
+  px(ctx, x + 3, y + 10, 8, 1, c.dressHi)
+  px(ctx, x + 3, y + 14, 8, 1, c.dressLo)
+  // 腰带
+  px(ctx, x + 3, y + 13, 8, 1, c.gold)
+  // 脸
+  px(ctx, x + 5, y + 7, 5, 1, c.skinLo)
+  px(ctx, x + 5, y + 8, 5, 2, c.skin)
+  px(ctx, x + 5, y + 7, 1, 1, c.skinHi)
+  // 闭眼 (×)
+  px(ctx, x + 6, y + 8, 1, 1, '#000')
+  px(ctx, x + 8, y + 8, 1, 1, '#000')
+  // 嘴
+  px(ctx, x + 7, y + 9, 1, 1, c.skinLo)
+  // 枪
+  px(ctx, x + 11, y + 11, 4, 1, c.gun)
+  px(ctx, x + 11, y + 11, 4, 1, c.gunHi)
+  // 腿
+  px(ctx, x + 2, y + 14, 4, 1, c.boot)
+  px(ctx, x + 2, y + 15, 4, 2, c.boot)
+  px(ctx, x + 9, y + 14, 4, 1, c.boot)
+  px(ctx, x + 9, y + 15, 4, 2, c.boot)
+}
+
+function drawArmAndGun(ctx, x, bodyTop, bodyH, state, aim, c) {
+  if (state === 'crouch') {
+    // 蹲下射击 — 枪管水平
+    px(ctx, x + 9, bodyTop + 4, 6, 1, c.gun)
+    px(ctx, x + 9, bodyTop + 4, 6, 1, c.gunHi)
+    px(ctx, x + 14, bodyTop + 4, 2, 2, c.skin)
+    px(ctx, x + 14, bodyTop + 4, 1, 1, c.skinHi)
+    return
+  }
+
   let gunAngle = aim
-  // 限制
   if (gunAngle > 1.2) gunAngle = 1.2
   if (gunAngle < -1.2) gunAngle = -1.2
 
@@ -106,15 +313,49 @@ function drawArmAndGun(ctx, x, bodyTop, bodyH, state, aim, gun, skin, suit) {
   const downAim = gunAngle > 0.5
 
   if (upAim) {
-    // 向上举枪
-    px(ctx, x + 9, bodyTop - 1, 2, 8, suit)
-    px(ctx, x + 9, bodyTop - 3, 3, 3, gun)
+    // 向上举枪 — 露出手臂(肤色)
+    // 和服袖口
+    px(ctx, x + 9, bodyTop + 4, 3, 2, c.dress)
+    px(ctx, x + 9, bodyTop + 4, 3, 1, c.dressHi)
+    px(ctx, x + 9, bodyTop + 6, 3, 1, c.dressLo)
+    // 手臂
+    px(ctx, x + 10, bodyTop + 1, 2, 4, c.skin)
+    px(ctx, x + 10, bodyTop + 1, 1, 4, c.skinHi)
+    px(ctx, x + 11, bodyTop + 1, 1, 4, c.skinLo)
+    // 枪管向上
+    px(ctx, x + 9, bodyTop - 3, 3, 4, c.gun)
+    px(ctx, x + 9, bodyTop - 3, 3, 1, c.gunHi)
+    px(ctx, x + 9, bodyTop - 3, 1, 4, '#181818')
+    // 枪口
+    px(ctx, x + 8, bodyTop - 4, 5, 1, c.gun)
   } else if (downAim) {
-    px(ctx, x + 11, bodyTop + 6, 5, 2, gun)
-    px(ctx, x + 15, bodyTop + 6, 2, 2, skin)
+    // 向下射击
+    px(ctx, x + 10, bodyTop + 5, 2, 2, c.dress)  // 袖口
+    px(ctx, x + 10, bodyTop + 5, 2, 1, c.dressHi)
+    px(ctx, x + 11, bodyTop + 7, 2, 2, c.skin)   // 手臂
+    px(ctx, x + 11, bodyTop + 7, 1, 2, c.skinHi)
+    px(ctx, x + 12, bodyTop + 8, 5, 2, c.gun)    // 枪管
+    px(ctx, x + 12, bodyTop + 8, 5, 1, c.gunHi)
+    px(ctx, x + 16, bodyTop + 8, 2, 2, c.skin)   // 手
+    px(ctx, x + 16, bodyTop + 8, 1, 1, c.skinHi)
   } else {
-    px(ctx, x + 10, bodyTop + 6, 6, 2, gun)
-    px(ctx, x + 15, bodyTop + 6, 2, 2, skin)
+    // 水平射击 — 手臂从和服袖子伸出
+    // 和服袖口
+    px(ctx, x + 10, bodyTop + 5, 3, 3, c.dress)
+    px(ctx, x + 10, bodyTop + 5, 3, 1, c.dressHi)
+    px(ctx, x + 10, bodyTop + 7, 3, 1, c.dressLo)
+    // 手臂
+    px(ctx, x + 12, bodyTop + 6, 2, 2, c.skin)
+    px(ctx, x + 12, bodyTop + 6, 1, 2, c.skinHi)
+    // 枪管
+    px(ctx, x + 13, bodyTop + 6, 6, 2, c.gun)
+    px(ctx, x + 13, bodyTop + 6, 6, 1, c.gunHi)
+    px(ctx, x + 13, bodyTop + 7, 6, 1, '#181818')
+    // 枪口闪光
+    px(ctx, x + 18, bodyTop + 5, 2, 4, c.gun)
+    // 手
+    px(ctx, x + 19, bodyTop + 6, 2, 2, c.skin)
+    px(ctx, x + 19, bodyTop + 6, 1, 1, c.skinHi)
   }
 }
 
@@ -938,4 +1179,109 @@ export function drawBackground(ctx, cameraX, levelWidth) {
     ctx.fillRect(tx + 8, 195, 4, 8)
     ctx.fillStyle = '#1c4c10'
   }
+}
+
+// === 菜单女帝头像 (大像素画, 56x80) ===
+export function drawMenuPortrait(ctx, ox, oy) {
+  const img = loadSprite(SPRITE_URLS.portrait)
+  if (img && img.complete && img.naturalWidth > 0) {
+    // 使用图片精灵
+    ctx.save()
+    ctx.imageSmoothingEnabled = false
+    // 绘制到 56x84 的区域 (与原来代码绘制的尺寸匹配)
+    ctx.drawImage(img, ox, oy, 56, 84)
+    ctx.restore()
+    return
+  }
+
+  // 回退: 代码绘制
+  const skin = '#fce8d8', skinHi = '#fff8f0', skinLo = '#e8b898'
+  const hair = '#1a1a2a', hairHi = '#3a3a4a', hairLo = '#0a0a14'
+  const dress = '#d82838', dressHi = '#fc4858', dressLo = '#8c1828'
+  const gold = '#fcb068', goldHi = '#fcd898', goldLo = '#bc8838'
+  const accent = '#fcd8e8'
+  const lip = '#c84868'
+
+  const s = 2
+  function P(gx, gy, gw, gh, color) {
+    px(ctx, ox + gx * s, oy + gy * s, gw * s, gh * s, color)
+  }
+
+  P(8, 0, 40, 2, hairLo)
+  P(6, 2, 44, 2, hairLo)
+  P(4, 4, 48, 36, hairLo)
+  P(6, 2, 44, 2, hair)
+  P(4, 4, 48, 34, hair)
+  P(10, 6, 2, 28, hairHi)
+  P(20, 6, 2, 28, hairHi)
+  P(38, 6, 2, 28, hairHi)
+  P(46, 6, 2, 28, hairHi)
+  P(8, 38, 40, 2, hairLo)
+  P(12, 40, 32, 2, hairLo)
+
+  P(12, 6, 32, 2, skinLo)
+  P(10, 8, 2, 20, skinLo)
+  P(44, 8, 2, 20, skinLo)
+  P(12, 28, 32, 2, skinLo)
+  P(12, 8, 32, 20, skin)
+  P(14, 8, 4, 6, skinHi)
+  P(38, 8, 4, 6, skinHi)
+  P(14, 22, 4, 2, '#fc8888')
+  P(38, 22, 4, 2, '#fc8888')
+
+  P(10, 4, 36, 2, hairLo)
+  P(10, 6, 36, 2, hair)
+  P(12, 8, 6, 4, hair)
+  P(26, 8, 4, 4, hair)
+  P(36, 8, 6, 4, hair)
+  P(12, 8, 4, 2, hairHi)
+  P(38, 8, 4, 2, hairHi)
+  P(10, 8, 2, 20, hair)
+  P(44, 8, 2, 20, hair)
+
+  P(16, 14, 8, 1, hair)
+  P(32, 14, 8, 1, hair)
+  P(16, 15, 8, 3, '#fcfcfc')
+  P(32, 15, 8, 3, '#fcfcfc')
+  P(19, 15, 3, 3, '#1a1a2a')
+  P(35, 15, 3, 3, '#1a1a2a')
+  P(20, 15, 1, 1, '#fcfcfc')
+  P(36, 15, 1, 1, '#fcfcfc')
+  P(16, 18, 8, 1, skinLo)
+  P(32, 18, 8, 1, skinLo)
+  P(15, 12, 8, 1, hair)
+  P(33, 12, 8, 1, hair)
+
+  P(27, 20, 2, 2, skinLo)
+  P(24, 24, 8, 2, lip)
+  P(24, 24, 8, 1, '#fc6878')
+
+  P(8, 30, 40, 2, dressLo)
+  P(6, 32, 2, 28, dressLo)
+  P(48, 32, 2, 28, dressLo)
+  P(6, 58, 44, 2, dressLo)
+  P(8, 32, 40, 26, dress)
+  P(8, 32, 40, 2, dressHi)
+  P(8, 34, 4, 22, dressHi)
+  P(22, 32, 12, 2, skin)
+  P(24, 34, 8, 2, skin)
+  P(26, 36, 4, 2, skinLo)
+  P(12, 38, 2, 2, accent)
+  P(42, 38, 2, 2, accent)
+  P(16, 44, 2, 2, accent)
+  P(38, 44, 2, 2, accent)
+  P(26, 48, 4, 2, accent)
+
+  P(6, 54, 44, 1, goldLo)
+  P(8, 55, 40, 3, gold)
+  P(8, 55, 40, 1, goldHi)
+  P(6, 58, 44, 1, goldLo)
+  P(14, 56, 2, 2, goldLo)
+  P(26, 56, 2, 2, goldLo)
+  P(38, 56, 2, 2, goldLo)
+
+  P(6, 30, 4, 4, gold)
+  P(46, 30, 4, 4, gold)
+  P(6, 30, 4, 1, goldHi)
+  P(46, 30, 4, 1, goldHi)
 }

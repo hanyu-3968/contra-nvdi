@@ -125,21 +125,25 @@ defineExpose({ releaseAll })
   position: absolute;
   width: 50px;
   height: 50px;
-  background: rgba(40, 40, 40, 0.6);
-  border: 2px solid rgba(252, 252, 252, 0.4);
-  color: #fcfcfc;
+  background: rgba(30, 20, 40, 0.65);
+  border: 2px solid rgba(252, 176, 104, 0.4);
+  color: #fcb068;
   font-size: 18px;
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(2px);
-  transition: background 0.05s;
+  backdrop-filter: blur(4px);
+  transition: all 0.05s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .dpad-btn.active {
-  background: rgba(252, 200, 40, 0.7);
-  border-color: #fcfc28;
+  background: rgba(252, 176, 104, 0.7);
+  border-color: #fcd898;
+  color: #1a0a2a;
+  box-shadow: 0 0 16px rgba(252,176,104,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  transform: scale(0.95);
 }
 
 .dpad-btn.up { top: 0; left: 50px; }
@@ -153,9 +157,9 @@ defineExpose({ releaseAll })
   left: 50px;
   width: 50px;
   height: 50px;
-  background: rgba(20, 20, 20, 0.5);
-  border: 2px solid rgba(252, 252, 252, 0.2);
-  border-radius: 8px;
+  background: rgba(20, 10, 30, 0.5);
+  border: 2px solid rgba(252, 176, 104, 0.2);
+  border-radius: 10px;
 }
 
 .actions {
@@ -170,28 +174,37 @@ defineExpose({ releaseAll })
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  border: 3px solid rgba(252, 252, 252, 0.5);
+  border: 3px solid rgba(252, 176, 104, 0.5);
   color: #fcfcfc;
   font-size: 14px;
   font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(2px);
-  transition: background 0.05s;
+  backdrop-filter: blur(4px);
+  transition: all 0.05s;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
 }
 
 .action-btn.shoot {
-  background: rgba(200, 40, 40, 0.55);
+  background: rgba(200, 40, 56, 0.6);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 .action-btn.shoot.active {
-  background: rgba(252, 80, 80, 0.85);
+  background: rgba(252, 72, 88, 0.9);
+  border-color: #fcd898;
+  box-shadow: 0 0 20px rgba(252,72,88,0.6), 0 2px 12px rgba(0,0,0,0.3);
+  transform: scale(0.92);
 }
 
 .action-btn.jump {
-  background: rgba(40, 120, 220, 0.55);
+  background: rgba(40, 100, 200, 0.6);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
 .action-btn.jump.active {
-  background: rgba(80, 160, 252, 0.85);
+  background: rgba(80, 160, 252, 0.9);
+  border-color: #fcd898;
+  box-shadow: 0 0 20px rgba(80,160,252,0.6), 0 2px 12px rgba(0,0,0,0.3);
+  transform: scale(0.92);
 }
 </style>

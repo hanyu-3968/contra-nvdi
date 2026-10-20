@@ -32,9 +32,13 @@ export const COLORS = {
   rock: '#888888',
   rockDark: '#555555',
   water: '#3c6cc8',
-  player: '#2868d8',
-  playerSkin: '#fcbcb0',
-  playerHat: '#2868d8',
+  // 女帝 (波雅·汉库克) 配色
+  player: '#c82828',       // 红色和服裙
+  playerSkin: '#fce8d8',   // 白皙肤色
+  playerHat: '#1a1a2a',    // 黑色长发
+  playerHair: '#1a1a2a',   // 黑发
+  playerAccent: '#fcd8e8', // 粉色装饰
+  playerDetail: '#fcb068', // 金色蛇饰
   enemy: '#c82828',
   enemySkin: '#fcbcb0',
   bullet: '#f8f8f8',

@@ -57,21 +57,23 @@ const weaponName = computed(() => WEAPONS[props.weapon]?.name || 'NORMAL')
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(20, 10, 30, 0.5);
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(252, 176, 104, 0.2);
   pointer-events: auto;
 }
 
 .hud-center {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(20, 10, 30, 0.5);
   padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(252, 176, 104, 0.2);
   pointer-events: auto;
 }
 
 .hud-item.stage .val {
-  color: #fc8c28;
+  color: #fcb068;
 }
 
 .hud-right {
@@ -99,9 +101,9 @@ const weaponName = computed(() => WEAPONS[props.weapon]?.name || 'NORMAL')
 }
 
 .icon-btn {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(252, 252, 252, 0.3);
-  color: #fcfcfc;
+  background: rgba(20, 10, 30, 0.6);
+  border: 1px solid rgba(252, 176, 104, 0.3);
+  color: #fcb068;
   width: 28px;
   height: 28px;
   border-radius: 4px;
@@ -109,5 +111,8 @@ const weaponName = computed(() => WEAPONS[props.weapon]?.name || 'NORMAL')
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.icon-btn:hover {
+  border-color: #fcd898;
 }
 </style>
