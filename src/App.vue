@@ -132,8 +132,7 @@ function setupGame() {
   }
 }
 
-// 自适应缩放: 保持比例, 居中, 填满屏幕
-// 竖屏时: 游戏舞台旋转90度 (横屏游戏适配竖屏手机)
+// 自适应缩放: 横屏铺满全屏(cover), 竖屏旋转90度
 function resize() {
   const stage = stageRef.value
   if (!stage) return
@@ -142,16 +141,19 @@ function resize() {
   const landscape = w > h
   isLandscape.value = landscape
   if (landscape) {
+    // 横屏: 铺满全屏 (cover 模式, 取较大比例, 超出部分裁切)
     const scale = Math.max(w / GAME_WIDTH, h / GAME_HEIGHT)
     stage.style.width = GAME_WIDTH * scale + 'px'
     stage.style.height = GAME_HEIGHT * scale + 'px'
     stage.style.transform = 'none'
+    stage.style.transformOrigin = 'center center'
   } else {
     // 竖屏: 旋转90度, 用屏幕宽度作为游戏"高度"方向
     const scale = Math.max(h / GAME_WIDTH, w / GAME_HEIGHT)
     stage.style.width = GAME_WIDTH * scale + 'px'
     stage.style.height = GAME_HEIGHT * scale + 'px'
     stage.style.transform = 'rotate(90deg)'
+    stage.style.transformOrigin = 'center center'
   }
   detectTouch()
 }
@@ -177,13 +179,17 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .game-root {
-  width: 100%;
-  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #000;
   overflow: hidden;
+  touch-action: none;
 }
 
 .game-stage {
@@ -193,6 +199,7 @@ onBeforeUnmount(() => {
   background: #5c94fc;
   overflow: hidden;
   transform-origin: center center;
+  flex-shrink: 0;
 }
 
 .game-canvas {
