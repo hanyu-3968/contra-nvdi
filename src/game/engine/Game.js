@@ -38,6 +38,7 @@ export class Game {
     this.camera = null
 
     this.shake = 0
+    this.flash = 0 // 闪光弹白光特效帧数
     this.currentLevel = 1 // 当前关卡编号
     this.totalLevels = 3 // 总关卡数
     this.levelClearTimer = 0 // 关卡过渡计时器
@@ -101,11 +102,11 @@ export class Game {
     const ps = this.level.data.playerStart
     const prevLives = (opts.fresh || !this.player) ? 3 : this.player.lives
     const prevScore = (opts.fresh || !this.player) ? this.score : this.score
-    const prevWeapon = (opts.fresh || !this.player) ? 'N' : this.player.weapon
+    const prevWeapon = (opts.fresh || !this.player) ? 'S' : this.player.weapon
     this.player = new Player(ps.x, ps.y)
     this.player.lives = prevLives
     this.player.weapon = prevWeapon
-    this.player.invuln = 120
+    this.player.invuln = 1800 // 开局无敌30秒 (60fps * 30)
     this.score = prevScore
     this.setState('playing')
     this.audio.startMusic()
@@ -176,8 +177,16 @@ export class Game {
 
     // 玩家更新
     if (this.godMode) this.player.invuln = 999
-    this.player.update(this.input.state, this.level, this.audio, (x, y, vx, vy, c, t, fp) => {
-      this.bullets.push(new Bullet(x, y, vx, vy, c, t, fp))
+
+    // 换弹 (C键/换弹按钮): 在五种武器间循环切换
+    if (this.input.state.swapPressed && this.player.alive) {
+      this.player.swapWeapon()
+      this.audio.swapWeapon()
+      this.emit()
+    }
+
+    this.player.update(this.input.state, this.level, this.audio, (x, y, vx, vy, c, t, fp, extra) => {
+      this.bullets.push(new Bullet(x, y, vx, vy, c, t, fp, extra))
     })
 
     // 水花音效 (出入水时播放)
@@ -251,12 +260,29 @@ export class Game {
     // 子弹更新
     for (const b of this.bullets) b.update(this.level)
 
+    // 闪光弹引爆: 清屏 (击杀所有存活敌人)
+    for (const b of this.bullets) {
+      if (b.dead || !b.fromPlayer || b.type !== 'flash') continue
+      b.dead = true
+      this.triggerFlash(b.x + b.w / 2, b.y + b.h / 2)
+    }
+
     // 碰撞: 玩家子弹 vs 敌人
     for (const b of this.bullets) {
       if (b.dead || !b.fromPlayer) continue
+      // 激光: 按轴截断长度 (撞墙/出界), 单帧瞬时判定
+      if (b.type === 'laser') {
+        b.length = this.truncateLaser(b)
+        if (b.length <= 0) { b.dead = true; continue }
+      }
       for (const e of this.enemies) {
         if (!e.alive) continue
-        if (this.aabb(b.x, b.y, b.w, b.h, e.x, e.y, e.w, e.h)) {
+        const hit = b.type === 'laser'
+          ? this.laserHit(b, e.x, e.y, e.w, e.h)
+          : b.type === 'fireball'
+            ? this.fireHit(b, e.x, e.y, e.w, e.h)
+            : this.aabb(b.x, b.y, b.w, b.h, e.x, e.y, e.w, e.h)
+        if (hit) {
           e.takeHit(b.damage, this.audio)
           if (!e.alive) {
             // 大型敌人爆炸更大
@@ -265,7 +291,9 @@ export class Game {
             this.score += e.score
             this.emit()
           }
-          if (b.type !== 'laser') b.dead = true
+          // 激光/喷火: 单帧瞬时 (命中不消失, 同帧内可命中多个敌人)
+          if (b.type === 'laser' || b.type === 'fireball') continue
+          b.dead = true
           break
         }
       }
@@ -323,6 +351,8 @@ export class Game {
 
     // 屏幕震动衰减
     if (this.shake > 0) this.shake--
+    // 闪光弹白光衰减
+    if (this.flash > 0) this.flash--
 
     // 胜利判定 - 到达终点
     if (this.player.x > this.level.data.goalX) {
@@ -340,8 +370,80 @@ export class Game {
     }
   }
 
+  // 闪光弹引爆: 白光 + 震屏 + 击杀所有存活敌人
+  triggerFlash(fx, fy) {
+    this.flash = 16
+    this.shake = 10
+    this.audio.flash()
+    this.explosions.push(new Explosion(fx, fy, true))
+    for (const e of this.enemies) {
+      if (!e.alive) continue
+      e.takeHit(99, this.audio)
+      if (!e.alive) {
+        const big = e.type === 'turret' || e.type === 'mech' || e.type === 'octopus' || e.type === 'deepmech' || e.type === 'mine'
+        this.explosions.push(new Explosion(e.x + e.w / 2, e.y + e.h / 2, big))
+        this.score += e.score
+      }
+    }
+    this.emit()
+  }
+
   aabb(x1, y1, w1, h1, x2, y2, w2, h2) {
     return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2
+  }
+
+  // 激光光束: 沿轴采样, 遇到实心瓦片或出界则截断, 返回有效长度
+  truncateLaser(b) {
+    const len = b.length
+    const step = 8
+    const thick = 4
+    const cx = b.axis === 'h' ? b.x : b.x + b.w / 2
+    const cy = b.axis === 'v' ? b.y : b.y + b.h / 2
+    let d = 0
+    for (; d <= len; d += step) {
+      const px = b.axis === 'h' ? b.x + b.dirSign * d : cx
+      const py = b.axis === 'v' ? b.y + b.dirSign * d : cy
+      const ww = b.axis === 'h' ? thick : b.w
+      const hh = b.axis === 'h' ? b.h : thick
+      const tiles = this.level.getSolidTiles(px, py, ww, hh)
+      if (tiles.length > 0) return d
+      // 出界截断
+      if (px < -8 || px > this.level.width + 8 || py < -8 || py > this.level.height + 8) return d
+    }
+    return len
+  }
+
+  // 激光命中检测: 敌人盒与光束线段相交
+  laserHit(b, ex, ey, ew, eh) {
+    if (b.axis === 'h') {
+      const x0 = Math.min(b.x, b.x + b.dirSign * b.length)
+      const x1 = Math.max(b.x, b.x + b.dirSign * b.length)
+      const y0 = b.y - 2
+      const y1 = b.y + b.h + 2
+      return ex < x1 && ex + ew > x0 && ey < y1 && ey + eh > y0
+    } else {
+      const y0 = Math.min(b.y, b.y + b.dirSign * b.length)
+      const y1 = Math.max(b.y, b.y + b.dirSign * b.length)
+      const x0 = b.x - 2
+      const x1 = b.x + b.w + 2
+      return ex < x1 && ex + ew > x0 && ey < y1 && ey + eh > y0
+    }
+  }
+
+  // 喷火命中检测: 敌人盒中心是否在半圆扇形内
+  fireHit(b, ex, ey, ew, eh) {
+    const ecx = ex + ew / 2
+    const ecy = ey + eh / 2
+    const dx = ecx - b.x
+    const dy = ecy - b.y
+    const dist = Math.hypot(dx, dy)
+    if (dist > b.radius) return false
+    // 扇形角度判定 (允许 ±0.35 弧度容差, 让边缘敌人也能被擦到)
+    const ang = Math.atan2(dy, dx)
+    let diff = ang - b.angle
+    while (diff > Math.PI) diff -= Math.PI * 2
+    while (diff < -Math.PI) diff += Math.PI * 2
+    return Math.abs(diff) <= b.angle / 2 + 0.35
   }
 
   render() {
@@ -392,6 +494,12 @@ export class Game {
     // 水下整体蓝色蒙版 (增强水下氛围)
     if (this.level && this.level.theme === 'underwater') {
       ctx.fillStyle = 'rgba(10, 40, 100, 0.12)'
+      ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
+    }
+
+    // 闪光弹白光覆盖 (清屏特效)
+    if (this.flash > 0) {
+      ctx.fillStyle = `rgba(255, 255, 230, ${this.flash / 16})`
       ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
     }
 
@@ -475,8 +583,8 @@ export class Game {
     // 操作说明
     ctx.fillStyle = '#a8a8c8'
     ctx.font = '10px monospace'
-    ctx.fillText('PC: 方向键移动  Z跳跃  X射击  Enter暂停', GAME_WIDTH / 2, 215)
-    ctx.fillText('手机: 屏幕方向键 + 动作按钮', GAME_WIDTH / 2, 230)
+    ctx.fillText('PC: 方向键移动  Z跳跃  X射击  C换弹  Enter暂停', GAME_WIDTH / 2, 215)
+    ctx.fillText('手机: 横屏体验最佳 (竖屏自动旋转)', GAME_WIDTH / 2, 230)
     ctx.fillStyle = '#fcd8e8'
     ctx.font = 'bold 10px monospace'
     ctx.fillText('— Made by hanyu —', GAME_WIDTH / 2, 250)

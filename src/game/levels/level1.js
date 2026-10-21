@@ -101,7 +101,7 @@ export const LEVEL1 = {
   ],
   // 道具 (放在浮空平台上方)
   powerUps: [
-    { x: 21 * TILE, y: 9 * TILE, letter: 'M' },
+    { x: 21 * TILE, y: 9 * TILE, letter: 'B' },
     { x: 57 * TILE, y: 9 * TILE, letter: 'S' },
     { x: 103 * TILE, y: 9 * TILE, letter: 'F' },
     { x: 131 * TILE, y: 9 * TILE, letter: 'L' }

@@ -93,6 +93,12 @@ export class AudioSystem {
   spread() { this.sweep(700, 1200, 0.1, 'square', 0.16) }
   laser() { this.sweep(1400, 300, 0.12, 'sawtooth', 0.18) }
   fireball() { this.sweep(300, 900, 0.14, 'triangle', 0.2) }
+  flash() {
+    // 闪光弹: 高频"叮" + 快速衰减
+    this.tone(2200, 0.25, 'sine', 0.3)
+    this.tone(1600, 0.3, 'sine', 0.2, 0.05)
+    this.sweep(3000, 200, 0.2, 'square', 0.12)
+  }
 
   jump() { this.sweep(300, 760, 0.18, 'square', 0.22) }
 
@@ -112,6 +118,12 @@ export class AudioSystem {
   powerUp() {
     const notes = [523, 659, 784, 1047]
     notes.forEach((n, i) => this.tone(n, 0.1, 'square', 0.22, i * 0.08))
+  }
+
+  // 换弹音效 (咔哒两声)
+  swapWeapon() {
+    this.tone(700, 0.05, 'square', 0.18)
+    this.tone(440, 0.07, 'square', 0.18, 0.06)
   }
 
   playerDie() {

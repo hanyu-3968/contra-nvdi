@@ -1,7 +1,7 @@
 import {
   PLAYER_SPEED, JUMP_POWER, PLAYER_W, PLAYER_H, PLAYER_H_CROUCH,
-  GRAVITY, MAX_FALL, WEAPONS, BULLET_SPEED,
-  SWIM_SPEED, SWIM_BUOYANCY, SWIM_FRICTION, SWIM_UP_POWER
+  GRAVITY, MAX_FALL, WEAPONS, BULLET_SPEED, WEAPON_ORDER,
+  SWIM_SPEED, SWIM_BUOYANCY, SWIM_FRICTION, SWIM_UP_POWER, AIR_SPEED_MULT
 } from '../constants.js'
 import { drawPlayer } from '../engine/Sprites.js'
 
@@ -23,7 +23,7 @@ export class Player {
     this.lives = 3
     this.invuln = 0 // 无敌帧
     this.fireTimer = 0
-    this.weapon = 'N'
+    this.weapon = 'S' // 开局默认S弹
     this.deathTimer = 0
     this.respawnTimer = 0
     this.spawnX = x
@@ -40,8 +40,8 @@ export class Player {
     this.w = PLAYER_W; this.h = PLAYER_H
     this.dir = 1; this.onGround = false; this.crouch = false
     this.aim = 0; this.state = 'stand'; this.frame = 0
-    this.alive = true; this.invuln = 120
-    this.fireTimer = 0; this.weapon = 'N'
+    this.alive = true; this.invuln = 1800
+    this.fireTimer = 0; this.weapon = 'S'
     this.deathTimer = 0; this.respawnTimer = 0
     this.swimming = false
     this.justEnteredWater = false
@@ -163,14 +163,39 @@ export class Player {
     const aimDown = input.down && !input.up && !this.onGround
 
     const wantCrouch = input.down && this.onGround && !movingLeft && !movingRight && !aimUp
-    this.crouch = wantCrouch
-    this.h = this.crouch ? PLAYER_H_CROUCH : PLAYER_H
+
+    // 蹲起/站立时锚定脚底位置 (高度变化时调整y, 避免悬空导致onGround抖动)
+    const newH = wantCrouch ? PLAYER_H_CROUCH : PLAYER_H
+    if (newH !== this.h) {
+      if (newH > this.h) {
+        // 站起: 检查头顶是否有遮挡
+        const headTiles = level.getSolidTiles(this.x, this.y - (newH - this.h), this.w, newH)
+        if (headTiles.length > 0) {
+          // 头顶有障碍物, 保持蹲姿
+          this.crouch = true
+          this.h = PLAYER_H_CROUCH
+        } else {
+          this.y -= newH - this.h
+          this.h = newH
+          this.crouch = wantCrouch
+        }
+      } else {
+        // 蹲下: 底部锚定 (y下移, 脚底不动)
+        this.y += this.h - newH
+        this.h = newH
+        this.crouch = wantCrouch
+      }
+    } else {
+      this.crouch = wantCrouch
+    }
 
     if (this.crouch) {
       this.vx = 0
     } else {
-      if (movingLeft) { this.vx = -PLAYER_SPEED; this.dir = -1 }
-      else if (movingRight) { this.vx = PLAYER_SPEED; this.dir = 1 }
+      // 空中水平速度提升, 跳跃更远 (保持起跳方向惯性)
+      const speed = this.onGround ? PLAYER_SPEED : PLAYER_SPEED * AIR_SPEED_MULT
+      if (movingLeft) { this.vx = -speed; this.dir = -1 }
+      else if (movingRight) { this.vx = speed; this.dir = 1 }
       else { this.vx = 0 }
     }
 
@@ -240,6 +265,31 @@ export class Player {
       by = cy
     }
 
+    // 激光: 瞬时长条光束 (魂斗罗L弹), 从枪口沿瞄准方向延伸
+    if (this.weapon === 'L') {
+      const len = w.length
+      let axis, ox, oy, sign
+      if (this.aim === -1.1) { axis = 'v'; ox = cx; oy = this.y; sign = -1 }
+      else if (this.aim === 1.1) { axis = 'v'; ox = cx; oy = this.y + this.h; sign = 1 }
+      else { axis = 'h'; ox = dir > 0 ? this.x + this.w - 2 : this.x + 2; oy = cy; sign = dir }
+      spawnBullet(ox, oy, 0, 0, w.color, 'laser', true, { axis, length: len, dirSign: sign })
+      audio.laser()
+      return
+    }
+
+    // 喷火: 半圆火焰 (180°扇形), 以枪口为圆心
+    if (this.weapon === 'F') {
+      const r = w.flameRadius
+      const a = w.flameAngle
+      let ox, oy, baseAngle
+      if (this.aim === -1.1) { ox = cx; oy = this.y; baseAngle = -Math.PI / 2 }
+      else if (this.aim === 1.1) { ox = cx; oy = this.y + this.h; baseAngle = Math.PI / 2 }
+      else { ox = dir > 0 ? this.x + this.w : this.x; oy = cy; baseAngle = 0 }
+      spawnBullet(ox, oy, 0, 0, w.color, 'fireball', true, { radius: r, angle: baseAngle })
+      audio.fireball()
+      return
+    }
+
     const baseVx = Math.cos(angle) * w.speed * (angle === 0 ? dir : 1)
     const baseVy = Math.sin(angle) * w.speed
 
@@ -252,15 +302,13 @@ export class Player {
       const finalAngle = Math.atan2(baseVy, baseVx) + spreadAngle
       const fvx = Math.cos(finalAngle) * speed
       const fvy = Math.sin(finalAngle) * speed
-      const btype = this.weapon === 'L' ? 'laser' : this.weapon === 'F' ? 'fireball' : 'normal'
+      const btype = this.weapon === 'B' ? 'flash' : 'normal'
       spawnBullet(bx, by, fvx, fvy, w.color, btype, true)
     }
 
     switch (this.weapon) {
-      case 'M': audio.machineGun(); break
       case 'S': audio.spread(); break
-      case 'L': audio.laser(); break
-      case 'F': audio.fireball(); break
+      case 'B': audio.flash(); break
       default: audio.shoot(); break
     }
   }
@@ -315,10 +363,31 @@ export class Player {
     this.weapon = letter
   }
 
+  // 换弹: 在五种武器间按 N→M→S→L→F 顺序循环切换
+  swapWeapon() {
+    const idx = WEAPON_ORDER.indexOf(this.weapon)
+    this.weapon = WEAPON_ORDER[(idx + 1) % WEAPON_ORDER.length]
+  }
+
   draw(ctx, camera) {
     const sx = this.x - camera.x
     const sy = this.y - camera.y
-    if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) return
+    // 无敌期间: 前2秒闪烁, 最后2秒闪烁警告, 中间段显示护盾圈
+    if (this.invuln > 0) {
+      const blink = Math.floor(this.invuln / 4) % 2 === 0
+      if (this.invuln > 1680 || this.invuln < 120) {
+        if (blink) return
+      } else {
+        // 中段: 画金色护盾圈
+        ctx.save()
+        ctx.strokeStyle = 'rgba(252, 208, 40, 0.6)'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(sx + this.w / 2, sy + this.h / 2, this.h * 0.85 + Math.sin(this.frame * 0.15) * 2, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
     drawPlayer(ctx, sx, sy, this.w, this.h, this.dir, this.state, this.aim, this.frame, this.weapon)
   }
 }

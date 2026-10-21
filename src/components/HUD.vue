@@ -24,7 +24,7 @@ import { WEAPONS } from '../game/constants.js'
 const props = defineProps({
   score: { type: Number, default: 0 },
   lives: { type: Number, default: 3 },
-  weapon: { type: String, default: 'N' },
+  weapon: { type: String, default: 'S' },
   level: { type: Number, default: 1 },
   soundOn: { type: Boolean, default: true },
   musicOn: { type: Boolean, default: true }
@@ -32,7 +32,7 @@ const props = defineProps({
 
 defineEmits(['toggleSound', 'toggleMusic'])
 
-const weaponName = computed(() => WEAPONS[props.weapon]?.name || 'NORMAL')
+const weaponName = computed(() => WEAPONS[props.weapon]?.name || 'SPREAD')
 </script>
 
 <style scoped>

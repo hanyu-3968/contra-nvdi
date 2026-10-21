@@ -1,11 +1,11 @@
 // 输入系统 - 统一处理键盘和触摸输入
 export class Input {
   constructor() {
-    // 按键状态: left, right, up, down, jump, shoot, start
+    // 按键状态: left, right, up, down, jump, shoot, start, swap
     this.state = {
       left: false, right: false, up: false, down: false,
-      jump: false, shoot: false, start: false,
-      jumpPressed: false, shootPressed: false, startPressed: false
+      jump: false, shoot: false, start: false, swap: false,
+      jumpPressed: false, shootPressed: false, startPressed: false, swapPressed: false
     }
     this._prev = {}
     this._touchMap = {} // touchId -> action
@@ -40,6 +40,7 @@ export class Input {
       case 'arrowdown': case 's': s.down = val; break
       case ' ': case 'z': case 'k': s.jump = val; break
       case 'x': case 'j': s.shoot = val; break
+      case 'c': case 'l': s.swap = val; break
       case 'enter': s.start = val; break
       default: break
     }
@@ -58,8 +59,10 @@ export class Input {
     s.jumpPressed = s.jump && !p.jump
     s.shootPressed = s.shoot && !p.shoot
     s.startPressed = s.start && !p.start
+    s.swapPressed = s.swap && !p.swap
     p.jump = s.jump
     p.shoot = s.shoot
     p.start = s.start
+    p.swap = s.swap
   }
 }

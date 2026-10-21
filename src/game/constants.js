@@ -7,7 +7,8 @@ export const MAX_FALL = 9
 
 // 玩家
 export const PLAYER_SPEED = 1.6
-export const JUMP_POWER = 8.5
+export const JUMP_POWER = 9.2
+export const AIR_SPEED_MULT = 1.4 // 空中水平速度倍率 (跳跃更远)
 export const PLAYER_W = 14
 export const PLAYER_H = 22
 export const PLAYER_H_CROUCH = 14
@@ -97,11 +98,12 @@ export const COLORS = {
   bubble: 'rgba(180, 220, 255, 0.5)'
 }
 
-// 武器类型
+// 武器类型 (4种: 散弹/激光/喷火/闪光弹)
 export const WEAPONS = {
-  N: { name: 'NORMAL', interval: 12, speed: 6, color: '#f8f8f8', spread: 0, count: 1 },
-  M: { name: 'MACHINE', interval: 6, speed: 7, color: '#fcd028', spread: 0, count: 1 },
   S: { name: 'SPREAD', interval: 16, speed: 5.5, color: '#fc8c28', spread: 0.28, count: 3 },
-  L: { name: 'LASER', interval: 14, speed: 11, color: '#28e8fc', spread: 0, count: 1 },
-  F: { name: 'FIREBALL', interval: 22, speed: 4.5, color: '#fc4c28', spread: 0, count: 1 }
+  L: { name: 'LASER', interval: 16, speed: 0, color: '#28e8fc', spread: 0, count: 1, beam: true, length: 128 },
+  F: { name: 'FIRE', interval: 4, speed: 0, color: '#fc4c28', spread: 0, count: 1, flame: true, flameRadius: 36, flameAngle: Math.PI },
+  B: { name: 'FLASH', interval: 40, speed: 8, color: '#fcfc88', spread: 0, count: 1 }
 }
+// 换弹循环顺序 (C键/换弹按钮 按此顺序切换)
+export const WEAPON_ORDER = ['S', 'L', 'F', 'B']

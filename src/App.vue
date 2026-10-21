@@ -69,6 +69,7 @@ const musicOn = ref(true)
 
 const isTouch = ref(false)
 const showMobileControls = ref(false)
+const isLandscape = ref(true) // 是否横屏 (竖屏时游戏画面旋转90度)
 
 const overlayType = computed(() => {
   if (gameState.value === 'menu') return 'start'
@@ -132,14 +133,26 @@ function setupGame() {
 }
 
 // 自适应缩放: 保持比例, 居中, 填满屏幕
+// 竖屏时: 游戏舞台旋转90度 (横屏游戏适配竖屏手机)
 function resize() {
   const stage = stageRef.value
   if (!stage) return
   const w = window.innerWidth
   const h = window.innerHeight
-  const scale = Math.max(w / GAME_WIDTH, h / GAME_HEIGHT)
-  stage.style.width = GAME_WIDTH * scale + 'px'
-  stage.style.height = GAME_HEIGHT * scale + 'px'
+  const landscape = w > h
+  isLandscape.value = landscape
+  if (landscape) {
+    const scale = Math.max(w / GAME_WIDTH, h / GAME_HEIGHT)
+    stage.style.width = GAME_WIDTH * scale + 'px'
+    stage.style.height = GAME_HEIGHT * scale + 'px'
+    stage.style.transform = 'none'
+  } else {
+    // 竖屏: 旋转90度, 用屏幕宽度作为游戏"高度"方向
+    const scale = Math.max(h / GAME_WIDTH, w / GAME_HEIGHT)
+    stage.style.width = GAME_WIDTH * scale + 'px'
+    stage.style.height = GAME_HEIGHT * scale + 'px'
+    stage.style.transform = 'rotate(90deg)'
+  }
   detectTouch()
 }
 

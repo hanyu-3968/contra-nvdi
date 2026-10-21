@@ -23,9 +23,10 @@
         <div class="ins-row"><span class="key">↑</span> 向上瞄准 / <span class="key">↓</span> 蹲下</div>
         <div class="ins-row"><span class="key">Z</span> / <span class="key">空格</span> 跳跃</div>
         <div class="ins-row"><span class="key">X</span> 射击</div>
+        <div class="ins-row"><span class="key">C</span> 换弹</div>
         <div class="ins-row"><span class="key">Enter</span> 暂停</div>
-        <div class="ins-row mobile-ins">手机: 屏幕方向键 + 动作按钮</div>
-        <div class="ins-row tip">武器: M机关枪 S散弹 L激光 F火球</div>
+        <div class="ins-row mobile-ins">手机: 建议横屏 / 竖屏自动旋转</div>
+        <div class="ins-row tip">武器: S散弹 L激光 F喷火 B闪光弹(清屏)</div>
         <div class="ins-row tip" style="color:#fcd8e8">— Made by hanyu —</div>
       </div>
     </div>

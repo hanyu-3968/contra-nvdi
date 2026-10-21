@@ -48,6 +48,15 @@
     <!-- 动作按钮 -->
     <div class="actions">
       <button
+        class="action-btn swap"
+        @touchstart.prevent="press('swap', true)"
+        @touchend.prevent="press('swap', false)"
+        @touchcancel.prevent="press('swap', false)"
+        @mousedown.prevent="press('swap', true)"
+        @mouseup.prevent="press('swap', false)"
+        @mouseleave="press('swap', false)"
+      >换弹</button>
+      <button
         class="action-btn shoot"
         :class="{ active: actions.shoot }"
         @touchstart.prevent="press('shoot', true)"
@@ -80,7 +89,7 @@ const props = defineProps({
 })
 
 const actions = reactive({
-  left: false, right: false, up: false, down: false, jump: false, shoot: false
+  left: false, right: false, up: false, down: false, jump: false, shoot: false, swap: false
 })
 
 function press(action, val) {
@@ -205,6 +214,17 @@ defineExpose({ releaseAll })
   background: rgba(80, 160, 252, 0.9);
   border-color: #fcd898;
   box-shadow: 0 0 20px rgba(80,160,252,0.6), 0 2px 12px rgba(0,0,0,0.3);
+  transform: scale(0.92);
+}
+
+.action-btn.swap {
+  background: rgba(120, 40, 160, 0.6);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.action-btn.swap:active {
+  background: rgba(180, 80, 252, 0.9);
+  border-color: #fcd898;
+  box-shadow: 0 0 20px rgba(180,80,252,0.6), 0 2px 12px rgba(0,0,0,0.3);
   transform: scale(0.92);
 }
 </style>

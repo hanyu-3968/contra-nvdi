@@ -16,7 +16,7 @@ const SPRITE_URLS = {
   run2: new URL('../../assets/sprites/nvdi_run2.png', import.meta.url).href,
   jump: new URL('../../assets/sprites/nvdi_jump.png', import.meta.url).href,
   crouch: new URL('../../assets/sprites/nvdi_crouch.png', import.meta.url).href,
-  die: new URL('../../assets/sprites/nvdi_die.png', import.meta.url).href,
+  aimup: new URL('../../assets/sprites/nvdi_aimup.png', import.meta.url).href,
   portrait: new URL('../../assets/sprites/nvdi_portrait.png', import.meta.url).href,
 }
 
@@ -48,36 +48,44 @@ if (typeof document !== 'undefined') {
 }
 
 // === 玩家绘制 — 女帝 (波雅·汉库克) ===
-// 使用图片精灵渲染
+// 使用图片精灵渲染 (高分辨率+平滑缩放, 视觉尺寸为碰撞盒2倍, 底部锚定居中)
 // dir: 1 右, -1 左; state: 'stand'|'run'|'jump'|'crouch'|'die'
 // aim: 角度 (弧度); frame: 动画帧
 export function drawPlayer(ctx, x, y, w, h, dir, state, aim, frame, weapon) {
   // 如果图片加载失败，回退到代码绘制
-  const img = getSpritesForState(state, frame)
+  const img = getSpritesForState(state, frame, aim)
   if (!img || !img.complete || img.naturalWidth === 0) {
     drawPlayerFallback(ctx, x, y, w, h, dir, state, aim, frame, weapon)
     return
   }
 
+  // 视觉尺寸: 2倍碰撞盒, 水平居中, 底部对齐 (脚的位置不变)
+  const vw = w * 2
+  const vh = h * 2
+  const vx = x - w / 2
+  const vy = y + h - vh
+
   ctx.save()
   const flip = dir < 0
   if (flip) {
-    ctx.translate(Math.floor(x + w), 0)
+    ctx.translate(Math.floor(vx + vw), 0)
     ctx.scale(-1, 1)
-    x = 0
   } else {
-    x = Math.floor(x)
+    ctx.translate(Math.floor(vx), 0)
   }
-  y = Math.floor(y)
-
-  // 绘制精灵图，缩放到玩家尺寸
-  ctx.imageSmoothingEnabled = false
-  ctx.drawImage(img, x, y, w, h)
+  // 照片类精灵需要平滑缩放, 避免马赛克
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(img, 0, Math.floor(vy), vw, vh)
 
   ctx.restore()
 }
 
-function getSpritesForState(state, frame) {
+function getSpritesForState(state, frame, aim = 0) {
+  // 举枪朝上: 站立/跑步时按住上键, 使用专用举枪姿势
+  if (aim === -1.1 && (state === 'stand' || state === 'run')) {
+    return loadSprite(SPRITE_URLS.aimup)
+  }
   switch (state) {
     case 'run':
       // 跑步动画: 两帧交替
@@ -88,7 +96,8 @@ function getSpritesForState(state, frame) {
     case 'crouch':
       return loadSprite(SPRITE_URLS.crouch)
     case 'die':
-      return loadSprite(SPRITE_URLS.die)
+      // 死亡: 复用跳跃图 (旋转由死亡动画处理)
+      return loadSprite(SPRITE_URLS.jump)
     case 'stand':
     default:
       return loadSprite(SPRITE_URLS.stand)
@@ -767,12 +776,65 @@ export function drawDeepMech(ctx, x, y, w, h, dir, frame, aimAngle = 0) {
 export function drawBullet(ctx, x, y, w, h, color, type = 'normal') {
   x = Math.floor(x); y = Math.floor(y)
   if (type === 'laser') {
-    px(ctx, x, y, w, h, color)
-    px(ctx, x - 2, y - 1, w + 4, h + 2, 'rgba(40,232,252,0.3)')
+    // 激光光束: 长条 (魂斗罗L弹) — 白色核心 + 青色光晕
+    const b = ctx.__beamRef // 由Bullet.draw传入
+    if (!b) { px(ctx, x, y, w, h, color); return }
+    const flicker = 0.85 + 0.15 * Math.sin(performance.now() / 40)
+    if (b.axis === 'h') {
+      const x0 = b.dirSign > 0 ? x : x - b.length
+      // 光晕
+      ctx.fillStyle = `rgba(40,232,252,${0.25 * flicker})`
+      ctx.fillRect(x0, y - 3, b.length, h + 6)
+      // 主体
+      ctx.fillStyle = color
+      ctx.fillRect(x0, y, b.length, h)
+      // 白色核心
+      ctx.fillStyle = `rgba(252,252,252,${0.9 * flicker})`
+      ctx.fillRect(x0, y + 1, b.length, Math.max(1, h - 2))
+    } else {
+      const y0 = b.dirSign > 0 ? y : y - b.length
+      ctx.fillStyle = `rgba(40,232,252,${0.25 * flicker})`
+      ctx.fillRect(x - 3, y0, w + 6, b.length)
+      ctx.fillStyle = color
+      ctx.fillRect(x, y0, w, b.length)
+      ctx.fillStyle = `rgba(252,252,252,${0.9 * flicker})`
+      ctx.fillRect(x + 1, y0, Math.max(1, w - 2), b.length)
+    }
   } else if (type === 'fireball') {
+    // 喷火: 半圆火焰扇形 (180°)
+    const b = ctx.__flameRef
+    if (!b) { px(ctx, x, y, w, h, color); return }
+    const r = b.radius
+    const a0 = b.angle - b.angle / 2
+    const a1 = b.angle + b.angle / 2
+    const flicker = 0.9 + 0.1 * Math.sin(performance.now() / 30)
+    // 外层: 橙红
+    ctx.fillStyle = `rgba(252,76,40,${0.5 * flicker})`
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.arc(x, y, r, a0, a1)
+    ctx.closePath()
+    ctx.fill()
+    // 中层: 橙黄
+    ctx.fillStyle = `rgba(252,208,40,${0.6 * flicker})`
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.arc(x, y, r * 0.66, a0, a1)
+    ctx.closePath()
+    ctx.fill()
+    // 内层: 亮黄白核心
+    ctx.fillStyle = `rgba(252,252,136,${0.85 * flicker})`
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.arc(x, y, r * 0.36, a0, a1)
+    ctx.closePath()
+    ctx.fill()
+  } else if (type === 'flash') {
+    // 闪光弹: 白黄核心 + 闪烁光晕
+    const t = Math.floor(performance.now() / 60) % 2
+    px(ctx, x - 2, y - 2, w + 4, h + 4, t ? 'rgba(252,252,136,0.5)' : 'rgba(252,208,40,0.4)')
     px(ctx, x, y, w, h, color)
-    px(ctx, x - 1, y - 1, w + 2, h + 2, '#fcd028')
-    px(ctx, x + 1, y + 1, w - 2, h - 2, '#fcfc88')
+    px(ctx, x + 1, y + 1, w - 2, h - 2, '#fcfcfc')
   } else if (type === 'ink') {
     // 墨弹 (章鱼炮台)
     px(ctx, x, y, w, h, color)
@@ -1187,7 +1249,8 @@ export function drawMenuPortrait(ctx, ox, oy) {
   if (img && img.complete && img.naturalWidth > 0) {
     // 使用图片精灵
     ctx.save()
-    ctx.imageSmoothingEnabled = false
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
     // 绘制到 56x84 的区域 (与原来代码绘制的尺寸匹配)
     ctx.drawImage(img, ox, oy, 56, 84)
     ctx.restore()

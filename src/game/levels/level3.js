@@ -170,7 +170,7 @@ export const LEVEL3 = {
   ],
   // 道具 (放在海藻平台上方)
   powerUps: [
-    { x: 17 * TILE, y: 9 * TILE, letter: 'M' },
+    { x: 17 * TILE, y: 9 * TILE, letter: 'B' },
     { x: 58 * TILE, y: 9 * TILE, letter: 'S' },
     { x: 101 * TILE, y: 9 * TILE, letter: 'L' },
     { x: 151 * TILE, y: 9 * TILE, letter: 'F' },
