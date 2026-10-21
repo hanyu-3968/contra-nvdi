@@ -30,12 +30,18 @@ export class Bullet {
     }
     // 闪光弹: 短寿命, 到达后引爆清屏 (不撞墙消失, 由Game处理引爆)
     this.maxLife = type === 'flash' ? 45 : 0
+    // 激光/喷火: 短寿命 (发出去闪几帧就消失)
+    if (type === 'laser') this.maxLife = 8
+    if (type === 'fireball') this.maxLife = 6
   }
 
   update(level) {
     this.life++
-    // 激光/喷火: 瞬时判定, 不移动 (Game按轴/扇形处理碰撞)
-    if (this.type === 'laser' || this.type === 'fireball') return
+    // 激光/喷火: 瞬时判定, 不移动, 短寿命到期消失
+    if (this.type === 'laser' || this.type === 'fireball') {
+      if (this.life >= this.maxLife) this.dead = true
+      return
+    }
     // 闪光弹: 短寿命, 到期由Game引爆 (不撞地形消失)
     if (this.type === 'flash') {
       if (this.life >= this.maxLife) this.dead = true
